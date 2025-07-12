@@ -1,0 +1,319 @@
+---
+title: "G4 SEMANA 12"
+format: html
+editor: visual
+---
+
+PRACTICA CALIFICADA SEMANA 12
+
+➢ Malqui Pariona, Kevin
+
+➢ Ordoya Poma, Alisson Marilyn
+
+➢ Ortega Hernández, Vanessa Jazmmin
+
+➢ Torres Castillo, Shireldy Yanet
+
+➢ Vivanco Quispe, Rodrigo Aron
+
+## Cargar los paquetes
+
+```{r}
+library(tidyverse)
+library(here)
+library(rio)
+library(gtsummary)
+library(car)
+library(survival)
+library(performance)
+```
+
+## 2. Ejemplos de análisis univariado y multivariado en una regresión logística
+
+### 2.1 El dataset para este ejercicio
+
+Para ilustrar el proceso de análisis multivariado en un modelo de regresión logística, se empleará el dataset bajo_peso. Este conjunto de datos incluye información de 189 madres y sus recién nacidos. Las variables registradas comprenden el resultado de bajo peso al nacer (sí o no), la edad de la madre (en años), el peso de la madre (en libras), la raza (Blanca, Afroamericana u Otra), el hábito de fumar durante el embarazo (sí o no), el número de partos prematuros previos, presencia de hipertensión (sí o no), irritabilidad uterina (sí o no), el número de visitas prenatales, y el peso del recién nacido (en gramos), entre otras variables de relevancia clínica.
+
+Cargando los datos
+
+```{r}
+bajo_peso <- import(here("data", "bajo_peso.csv"))
+```
+
+Un vistazo a los datos
+
+```{r}
+head(bajo_peso)
+```
+
+### 2.2 El análisis univariado
+
+En esta sección se estimarán los Odds Ratios (OR) de cada variable de manera independiente, es decir, sin ajuste por otras covariables.
+
+Antes de realizar este análisis, es necesario definir las categorías de referencia para las variables categóricas mediante la función `mutate()` en combinación con `relevel()`. Este paso asegura que la interpretación de los OR se haga en relación con la categoría de referencia seleccionada. El resultado se guarda en un nuevo objeto llamado bajo_peso_1
+
+```{r}
+bajo_peso_1 <- bajo_peso |> 
+  mutate(
+    bajo_peso = relevel(as.factor(bajo_peso), ref = "No"),
+    raza = relevel(as.factor(raza), ref = "Blanca"),
+    fuma = relevel(as.factor(fuma), ref = "No"),
+    hipertension = relevel(as.factor(hipertension), ref = "No"),
+    irritabilidad_utero = relevel(as.factor(irritabilidad_utero), ref = "No")
+  ) |> 
+  na.omit()
+```
+
+Para obtener la tabla con los resultados del análisis univariado, se utiliza la función `tbl_uvregression()`, que permite generar tablas con las estimaciones de regresión logística para cada variable incluida. Entre sus argumentos se especifican el método de regresión, las variables a analizar, la familia de distribución (binomial para modelos logísticos), y opciones de presentación de los resultados como los intervalos de confianza, valores p y formato de los estimadores
+
+```{r}
+tabla_reg_log_univ <- bajo_peso_1 |> 
+  tbl_uvregression(
+    include = c(edad_madre, peso_madre, raza, fuma, partos_prematuros, hipertension, irritabilidad_utero, visitas_medicas),
+    y = bajo_peso,
+    method = glm,
+    method.args = list(family = binomial),
+    exponentiate = TRUE,
+    conf.int = TRUE,
+    hide_n = TRUE,
+    add_estimate_to_reference_rows = FALSE,
+    pvalue_fun = ~ style_pvalue(.x, digits = 3),
+    estimate_fun = ~ style_number(.x, digits = 2),
+    label = list(
+      edad_madre ~ "Edad de la madre (años)",
+      peso_madre ~ "Peso de la madre (libras)",
+      raza ~ "Raza",
+      fuma ~ "Fuma durante el embarazo",
+      partos_prematuros ~ "Partos prematuros previos",
+      hipertension ~ "Hipertensión",
+      irritabilidad_utero ~ "Irritabilidad uterina",
+      visitas_medicas ~ "Visitas prenatales"
+    )
+  ) |> 
+  bold_labels() |> 
+  bold_p(t = 0.05) |> 
+  modify_header(estimate = "**OR no ajustado**", p.value = "**valor p**")
+```
+
+```{r}
+tabla_reg_log_univ
+```
+
+Se observa lo siguiente:
+
+Edad de la madre (años): Cada aumento de un año en la edad materna se asocia con una disminución del 5% en la probabilidad de bajo peso al nacer el OR es 0.9, aunque esta asociación no alcanza significancia estadística p es 0.105
+
+Peso de la madre : Por cada kg adicional de peso materno, la probabilidad de bajo peso al nacer disminuye un 1% OR = 0.99 con una asociación estadísticamente significativa p = 0.023
+
+Raza: Comparado con las madres de raza blanca (categoría de referencia), las madres afroamericanas presentan un OR de 2.33 p = 0.068 y las de otra raza un OR de 1.89 p = 0.067, lo cual sugiere una posible mayor probabilidad de bajo peso, aunque no alcanza significancia estadística
+
+Fuma durante el embarazo: Las madres que fuman tienen 2.02 veces más probabilidad de tener un recién nacido con bajo peso p = 0.028 asociación estadísticamente significativa
+
+Partos prematuros previos: Cada parto prematuro previo aumenta 2.23 veces la probabilidad de bajo peso al nacer p = 0.011 siendo un factor de riesgo importante.
+
+Hipertensión: Las madres con hipertensión tienen 3.37 veces mayor probabilidad de bajo peso al nacer (p = 0.046), con significancia estadística.
+
+Irritabilidad uterina: Las madres con irritabilidad uterina presentan un OR de 2.58 p = 0.023 indicando mayor riesgo de bajo peso.
+
+Visitas prenatales: Cada visita prenatal adicional tiende a disminuir la probabilidad de bajo peso OR = 0.87 pero sin alcanzar significancia estadística (p = 0.389).
+
+En resumen, se observa que los factores peso materno bajo, fumar durante el embarazo, partos prematuros previos, hipertensión e irritabilidad uterina muestran asociaciones estadísticamente significativas con el desenlace de bajo peso al nacer.
+
+### 2.3 El análisis multivariado
+
+Para el análisis de regresión logística multivariada, se aplicó una estrategia de selección automática de variables utilizando tres enfoques: eliminación hacia atrás (*backward elimination*), selección hacia adelante (*forward selection*) y selección paso a paso (*stepwise selection)*.
+
+**Paso 1. Ajuste del modelo inicial**
+
+Ajustamos un modelo de regresión logística binaria que incluya todas las variables candidatas
+
+```{r}
+var_modelo <- glm(
+  bajo_peso ~ peso_madre + fuma + partos_prematuros + hipertension + irritabilidad_utero,
+  data = bajo_peso_1,
+  family = binomial(link = "logit")
+)
+```
+
+**Paso 2a. Realizamos la selección de variables** usando la técnica Eliminación hacia atrás (Backward elimination).
+
+```{r}
+multi_backward <- var_modelo |>
+  step(direction = "backward", trace = FALSE)
+```
+
+**Paso 2b. Realizamos la selección de variables** usando la técnica Selección hacia adelante (Forward selection).
+
+```{r}
+multi_forward <- var_modelo |>
+  step(direction = "forward", trace = FALSE)
+```
+
+**Paso 3c. Realizamos la selección de variables** usando la técnica Selección paso a paso (Stepwise selection).
+
+```{r}
+multi_stepwise <- var_modelo |>
+  step(direction = "both", trace = FALSE)
+```
+
+Los resultados de la selección de las variables para el modelo se han guardado en los objetos: multi_backward, multi_forward, y multi_stepwise. El siguiente paso es comparar los valores de AIC y la multicolinealidad entre las variables seleccionadas por cada uno de los modelos.
+
+**Paso 3. Estimados el AIC para los modelos.**
+
+Podemos visualizar el AIC y cuáles variables han sido seleccionadas en cada modelo, usando la función summary.
+
+```{r}
+summary(multi_backward)
+```
+
+Peso de la madre: Cada libra adicional de peso materno disminuye el riesgo de bajo peso al nacer en un 1.5% (OR = 0.98; p = 0.019). Asociación estadísticamente significativa.
+
+Hipertensión: Las madres con hipertensión tienen casi el doble de riesgo de bajo peso al nacer (OR = 2.60; p = 0.005). Asociación estadísticamente significativa.
+
+Fuma durante el embarazo: Las madres que fuman presentan un OR de 1.76 (p = 0.099), no alcanzando significancia estadística en el modelo ajustado.
+
+Partos prematuros: Aunque presenta un OR de 1.71 (p = 0.118), no es estadísticamente significativo.
+
+Irritabilidad uterina: OR de 2.16 (p = 0.089), con tendencia a significancia pero no significativa al nivel habitual de 0.05.
+
+```{r}
+summary(multi_forward)
+```
+
+Peso materno bajo y hipertensión son los factores que se mantienen como predictores independientes de bajo peso al nacer, incluso tras ajustar por el resto de las variables.
+
+Las otras variables aportan información, pero no alcanzan el umbral habitual de significancia estadística (p \< 0.05) en este modelo.
+
+```{r}
+summary(multi_stepwise)
+```
+
+Los dos factores más importantes que se mantienen como predictores independientes de bajo peso al nacer son: peso materno bajo y hipertensión
+
+El resto de variables muestran asociación positiva pero no alcanzan significancia estadística al nivel tradicional (p \< 0.05), aunque podrían tener relevancia clínica o justificar más investigación.
+
+### **2.4 Conclusión**
+
+Los modelos obtenidos mediante eliminación hacia atrás (backward elimination) y selección paso a paso (stepwise selection) presentaron el mismo valor de AIC (222.31), indicando un ajuste similar y adecuado en comparación con el modelo generado mediante selección hacia adelante (forward selection), que también alcanzó el mismo conjunto de variables.
+
+En todos los métodos, se seleccionó consistentemente el mismo grupo de predictores: peso materno, hipertensión, tabaquismo, partos prematuros e irritabilidad uterina.
+
+Esto sugiere que el modelo es estable y robusto, y que peso materno bajo y presencia de hipertensión son los principales factores independientes asociados al bajo peso al nacer en esta muestra. Las otras variables presentaron asociaciones positivas, aunque sin alcanzar significancia estadística tras el ajuste.
+
+### 2.5 Evaluación de colinealidad
+
+Finalmente, evaluamos la colinealidad usando la función `check_collinearity()` del paquete `performance`.
+
+```{r}
+performance::check_collinearity(multi_backward, ci = NULL)
+```
+
+Todos los valores de VIF fueron inferiores a 2, indicando muy baja colinealidad entre las variables incluidas. Este resultado sugiere que no existen problemas de multicolinealidad que afecten la estabilidad de las estimaciones del modelo.
+
+```{r}
+performance::check_collinearity(multi_forward, ci = NULL)
+```
+
+Todos los VIF son inferiores a 2, lo que indica una muy baja colinealidad entre las variables. Este resultado confirma que no existe multicolinealidad relevante en el modelo y que las estimaciones de los coeficientes son estables y confiables.
+
+```{r}
+performance::check_collinearity(multi_stepwise, ci = NULL)
+```
+
+Todos los VIF son inferiores a 2, lo que indica ausencia de multicolinealidad relevante.
+
+Las variables seleccionadas aportan información independiente al modelo.
+
+Estos resultados confirman que las estimaciones del modelo multi_stepwise son estables y no están afectadas por redundancia entre las variables.
+
+### **2.6 Conclusión**
+
+Los modelos generados mediante eliminación hacia atrás (*backward elimination*), selección hacia adelante (*forward selection*) y selección paso a paso (*stepwise selection*) mostraron valores de VIF bajos y cercanos a 1, lo que indica una baja colinealidad entre las variables incluidas.
+
+En este caso, todos los métodos de selección identificaron el mismo conjunto de variables, sin diferencias en los valores de AIC ni en los indicadores de colinealidad. Este resultado refuerza la estabilidad y consistencia del modelo multivariado obtenido, y sugiere que las variables seleccionadas aportan información independiente sin redundancias relevantes.
+
+### 2.7 Modelo final
+
+Con base en los resultados de ajuste (AIC = 222.31) y la evaluación de colinealidad (VIF bajo en todas las variables), se concluye que el modelo óptimo es el obtenido mediante cualquiera de las técnicas de selección automática aplicadas (backward, forward o stepwise), dado que todas produjeron exactamente el mismo conjunto de variables.
+
+El modelo final incluye un total de cinco variables independientes: peso materno, tabaquismo, partos prematuros previos, hipertensión e irritabilidad uterina, las cuales serán reportadas en el análisis multivariado definitivo.
+
+## 3 Reporte del análisis univariado y multivariado
+
+Como en las sesiones anteriores, reportaremos los resultados del modelo final de regresión logística.
+
+Tabla para los resultados de la regresión univariado (no ajustado)
+
+```{r}
+tabla_univ <- bajo_peso_1 |> 
+  tbl_uvregression(
+    include = c(peso_madre, fuma, partos_prematuros, hipertension, irritabilidad_utero),
+    y = bajo_peso,
+    method = glm,
+    method.args = list(family = binomial),
+    exponentiate = TRUE,
+    conf.int = TRUE,
+    hide_n = TRUE,
+    add_estimate_to_reference_rows = FALSE,
+    pvalue_fun = ~ style_pvalue(.x, digits = 3),
+    estimate_fun = ~ style_number(.x, digits = 2),
+    label = list(
+      peso_madre ~ "Peso de la madre (libras)",
+      fuma ~ "Fuma durante el embarazo",
+      partos_prematuros ~ "Partos prematuros previos",
+      hipertension ~ "Hipertensión",
+      irritabilidad_utero ~ "Irritabilidad uterina"
+    )
+  ) |> 
+  bold_labels() |> 
+  bold_p(t = 0.05) |> 
+  modify_header(estimate = "**OR**", p.value = "**valor p**")
+```
+
+Tabla para los resultados de la regresión multivariable (ajustado)
+
+```{r}
+tabla_multi <- glm(
+  bajo_peso ~ peso_madre + fuma + partos_prematuros + hipertension + irritabilidad_utero,
+  data = bajo_peso_1,
+  family = binomial(link = "logit")
+) |> 
+  tbl_regression(
+    exponentiate = TRUE,
+    conf.int = TRUE,
+    pvalue_fun = ~ style_pvalue(.x, digits = 3),
+    estimate_fun = ~ style_number(.x, digits = 2),
+    label = list(
+      peso_madre ~ "Peso de la madre (libras)",
+      fuma ~ "Fuma durante el embarazo",
+      partos_prematuros ~ "Partos prematuros previos",
+      hipertension ~ "Hipertensión",
+      irritabilidad_utero ~ "Irritabilidad uterina"
+    )
+  ) |> 
+  bold_labels() |> 
+  bold_p(t = 0.05) |> 
+  modify_header(estimate = "**OR ajustado**", p.value = "**valor p**")
+```
+
+La tabla final la construimos usando la función tbl_merge(). De modo que la tabla del análisis univariado o no ajustado y multivariado o ajustado, se muestren lado a lado.
+
+```{r}
+tabla_final <- 
+  tbl_merge(
+    list(tabla_univ, tabla_multi),
+    tab_spanner = c("**Univariado**", "**Multivariado ajustado**")
+  )
+```
+
+```{r}
+tabla_final
+```
+
+En el modelo de regresión logística ajustado, el peso materno y la hipertensión se asociaron de manera significativa con el riesgo de bajo peso al nacer.
+
+Por cada kgadicional de peso materno, las probabilidades de bajo peso disminuyen en un 2% (OR = 0.98; IC95%: 0.97–1.00; p = 0.019), indicando un efecto protector del mayor peso materno.
+
+De igual forma, las madres con hipertensión presentan 6.7 veces mayor riesgo de bajo peso en sus recién nacidos (OR = 6.72; IC95%: 1.82–28.35; p = 0.005), constituyéndose en un importante factor de riesgo independiente.
+
+Por otro lado, las variables tabaquismo durante el embarazo, partos prematuros previos e irritabilidad uterina no mostraron asociación estadísticamente significativa tras el ajuste por las demás variables del modelo.

@@ -1,0 +1,277 @@
+---
+title: "PRACTICA_CALIFICADA02"
+format: html
+editor: Grupo 04
+---
+
+**PRACTICA CALIFICADA 02**
+
+## Grupo 04:
+
+-Malqui Pariona Kevin Martires
+
+-Ordoya Poma Alisson Marilyn
+
+-Ortega Hernandez Vanessa Jazmmin
+
+-Torres Castillo Shireldy Yanet
+
+-Vivanco Quispe Rodrigo Aron
+
+## Instalar paquetes
+
+```{r}
+# install.packages("tidyverse")
+# install.packages("rio")
+# install.packages("here")
+# install.packages("janitor")
+# install.packages("skimr")
+# install.packages("visdat")
+```
+
+## Cargar paquetes
+
+```{r}
+library(tidyverse)
+library(rio)
+library(here)
+library(janitor)
+```
+
+## Importando bajo_peso.csv usando el paquete rio
+
+```{r}
+data_bajo_peso = import(here("data", "bajo_peso.csv"))
+```
+
+## Vistazo al contenido
+
+### ¿Cuántas variables y observaciones hay?
+
+El primer número indica el número de filas, el segundo, el número de columnas.
+
+```{r}
+dim(data_bajo_peso)
+```
+
+### ¿Cuantas y qué tipos de variables hay?
+
+```{r}
+str(data_bajo_peso)
+```
+
+Una función similar
+
+```{r}
+dplyr::glimpse(data_bajo_peso)
+```
+
+Estadísticos descriptivos y otros parámetros para exploración de datos
+
+```{r}
+skimr::skim(data_bajo_peso)
+```
+
+Resumen por variable
+
+```{r}
+summary(data_bajo_peso)
+```
+
+### Visualmente
+
+```{r}
+View(data_bajo_peso)
+```
+
+```{r}
+visdat::vis_dat(data_bajo_peso)
+```
+
+```{r}
+DataExplorer::create_report(data_bajo_peso)
+```
+
+# Limpieza de datos
+
+## Paso uno: corregir los nombres de variables.
+
+Clean names es una función del paquete janitor
+
+```{r}
+data_bajo_peso_1 = clean_names(data_bajo_peso)
+```
+
+Nota el constraste (la función `names()` imprime los nombres de columnas de un *dataset*)
+
+```{r}
+names(data_bajo_peso)
+```
+
+```{r}
+names(data_bajo_peso_1)
+```
+
+## Paso dos: convertir celdas vacías a NA
+
+```{r}
+data_bajo_peso_2 = mutate_if(data_bajo_peso_1, is.character, list(~na_if(.,"")))
+```
+
+## Paso tres: eliminar columnas o filas vacias.
+
+```{r}
+data_bajo_peso_3 = remove_empty(data_bajo_peso_2, which = c("rows", "cols"))
+```
+
+## Optimizando el código
+
+### Corregir nombres, celdas vacías a NA y eliminar columnas o filas vacías.
+
+```{r}
+data_bajo_peso_1 = data_bajo_peso |> 
+  clean_names() |> 
+  mutate_if(is.character, list(~ na_if(., ""))) |> 
+  remove_empty(which = c("rows", "cols"))
+```
+
+## Paso 4: corregir errores ortográficos o valores inválidos
+
+### Inspección tabular
+
+```{r}
+data_bajo_peso_1 |> count(raza) # Cambia de variable categórica
+```
+
+Transformando de data.frame a as tibble
+
+```{r}
+data_bajo_peso_2 = as_tibble(data_bajo_peso_1)
+```
+
+Corregir errores ortográficos usando `mutate()` y `case_when()`
+
+```{r}
+data_bajo_peso_3 = data_bajo_peso_2 |> 
+  mutate(raza = case_when(
+    raza == "Afroamericanaa" ~ "Afroamericana", 
+    raza == "Afromericana" ~ "Afroamericana", 
+    raza == "afroamericana" ~ "Afroamericana",
+    raza == "otro" ~ "Otra",
+    TRUE ~ raza))
+```
+
+```{r}
+data_bajo_peso_3 = data_bajo_peso_2 |> 
+  mutate(raza = case_when(
+    raza == "otro" ~ "Otra",
+    raza %in% c("Afroamericanaa", "Afromericana", "afroamericana") ~ "Afroamericana",
+    TRUE ~ raza)
+    )
+```
+
+## Paso 5: Colapsar una variable categórica en menos niveles
+
+Un vistazo a la variable de interés
+
+```{r}
+data_bajo_peso_3 |> count(raza)
+```
+
+Colapsar a dos categorías
+
+```{r}
+data_bajo_peso_4 = data_bajo_peso_3 |> 
+  mutate(raza_2 = case_when(
+    raza %in% c("Afroamericana", "Blanca") ~ "Afroamericana o Blanca",
+    TRUE ~ raza)
+    )
+```
+
+Comprobando el cambio
+
+```{r}
+data_bajo_peso_4 |> count(raza_2)
+```
+
+## Paso 6: Transformar una variable
+
+Transformación a logaritmo
+
+```{r}
+summary(data_bajo_peso_4$peso_nacer)
+```
+
+```{r}
+hist(data_bajo_peso_4$peso_nacer)
+```
+
+```{r}
+data_bajo_peso_5 <- data_bajo_peso_4 |>  
+  mutate(log_peso_de_nac = (log(peso_nacer + 1)))
+
+```
+
+```{r}
+data_bajo_peso_5 |>  
+  ggplot(aes(x = log_peso_de_nac)) +
+  geom_histogram(bins = 10) +
+  labs(y = "Frecuencia", x = "log(peso de nacimiento + 1)")
+```
+
+Transformación a binario
+
+```{r}
+data_bajo_peso_6 = data_bajo_peso_5 |>
+  mutate(
+    peso_de_nac_c = case_when(
+      peso_nacer <  10 ~ "< 10",
+      peso_nacer >= 10 ~ ">= 10"
+    )
+  ) |>
+  mutate(peso_de_nac_c = factor(peso_de_nac_c, levels = "< 10", ">= 10"))
+```
+
+Transformando valores a valores perdidos usando la función `na_if()`
+
+```{r}
+data_bajo_peso_7 = data_bajo_peso_6 |> 
+  mutate(peso_nacer = na_if(peso_nacer, -7))
+```
+
+Transformando valores a valores perdidos usando la función `case_when()`
+
+```{r}
+data_bajo_peso_7 = data_bajo_peso_6 |> 
+  mutate(edad_madre = case_when(edad_madre %in% c(3, 999) ~ NA,
+                            TRUE ~ edad_madre))
+```
+
+## Paso 7: Renombrar una variable
+
+Imprimir los nombres. ¿Cuáles necesitan cambio?
+
+```{r}
+names(data_bajo_peso_7)
+```
+
+Cambiando un nombre de variables
+
+```{r}
+data_bajo_peso_8 <- data_bajo_peso_7 |>  
+  rename(peso_al_nacer = peso_nacer)
+```
+
+Varios a la vez
+
+```{r}
+data_bajo_peso_8 <- data_bajo_peso_7 |>  
+  rename(peso_al_nacer = peso_nacer,
+         bajo_peso_al_nacer = bajo_peso)
+```
+
+Comprobando
+
+```{r}
+names(data_bajo_peso_8)
+```

@@ -1,0 +1,371 @@
+---
+title: "G4_ SEMANA 11"
+format: html
+editor: visual
+---
+
+PRACTICA CALIFICADA SEMANA 11
+
+➢ Malqui Pariona, Kevin
+
+➢ Ordoya Poma, Alisson Marilyn
+
+➢ Ortega Hernández, Vanessa Jazmmin
+
+➢ Torres Castillo, Shireldy Yanet
+
+➢ Vivanco Quispe, Rodrigo Aron
+
+### Instalar los paquetes
+
+```{r}
+install.packages("broom")
+install.packages("survival")
+install.packages("survminer")
+install.packages("ggsurvfit")
+install.packages("cardx")
+```
+
+### Cargar paquetes
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(survival)
+library(survminer)
+library(gtsummary)
+library(broom)
+library(here)
+library(rio)
+library(ggsurvfit)
+library(cardx)
+```
+
+```{r}
+bajo_pesoo <- import(here("data", "bajo_peso.csv"))
+```
+
+```{r}
+bajo_pesoo <- bajo_pesoo %>% 
+  mutate(bajodepeso = ifelse(bajo_peso == "Sí", 1, 0),
+         fumador = ifelse(fuma == "Sí", 1, 0))
+```
+
+# Estimaciones de supervivencia usando el método de Kaplan-Meier
+
+## El dataset bajo peso
+
+El dataset bajo_peso contiene datos de 189 individuos. Para el primer ejecicio haremos uso de las siguientes 3 variables:
+
+-   edad_madre : sólo a modo de práctica, como si la edad fuera tiempo de seguimiento; no es lo usual en supervivencia, pero para practicar el código sirve
+-   bajo_peso: indica si el parcipante tuvo el evento o si fue censurado (0=censura, 1=evento).
+-   fuma: para ver si el fumar afecta en la baja de peso
+
+Vistazo al dataset
+
+```{r}
+bajo_pesoo |> 
+  select(edad_madre, bajodepeso, fumador) |> 
+  summary()
+```
+
+CONCLUSION:
+
+La mayoría de las madres tenían entre 19 y 26 años, con un promedio de 23 años. Hay algunas madres adolescentes muy jóvenes desde 14 años
+
+Aproximadamente un tercio de los recién nacidos presentaron bajo peso, mientras que la mayoría nacieron con peso adecuado
+
+Cerca del 39.15% de las madres reportaron fumar durante el embarazo.
+
+## El desenlace en el análisis de supervivencia
+
+Kaplan-Meier estima la probabilidad de supervivencia para distintos puntos de tiempo. En R, usamos la función `Surv()` para crear la variable "respuesta" o desenlace. Este tipo de desenlace incluye a su vez estado del participante (con el evento o sin el evento) y tiempo.
+
+```{r}
+Surv(bajo_pesoo$edad_madre, bajo_pesoo$bajodepeso)
+```
+
+CONCLUSION:
+
+Pacuente 1 19+\
+La madre tenía 19 años y su bebé no nació con bajo peso
+
+Paciente 2 33\
+La madre tenía 33 años y su bebé sí nació con bajo peso
+
+Paciente 3 20+\
+La madre tenía 20 años y su bebé no nació con bajo peso.
+
+Paciente 4 21\
+La madre tenía 21 años y su bebé sí nació con bajo peso.
+
+La variable "respuesta" la incluimos en la función survfit para estimar la probabilidad de supervivencia (una curva) usando el método de Kaplan-Meier. Aquí estimados la curva de superviencia global sin considerar ningun predictor. Es por ello que añadimos "\~ 1" a la formula. Esa parte será reemplazada más adelante por algun predictor o covariable de interés.
+
+```{r}
+km = survfit(Surv(edad_madre, bajodepeso) ~ 1, data = bajo_pesoo)
+```
+
+¿Qué hay dentro del objeto km?
+
+```{r}
+str(km)
+```
+
+CONCLUSION:
+
+Los resultados sirven para estimar la probabilidad acumulada de que los recién nacidos no presenten bajo peso dependiendo de la edad de la madre al inicio del examen de 14 años la probabilidad de no bajo peso es de aproximadamente 99%. y medida que la edad de la madre aumenta, esta probabilidad disminuye levemente, alcanzando valores alrededor de 89% hacia los extremos superiores de edad. Esto sugiere que, en general el bajo peso al nacer tiene una frecuencia moderada en esta población y puede verse afectado por la edad materna.
+
+## Gráficos de Kaplan-Meier
+
+La información contenida en el objeto creado con las estimaciones puede ser mejor visualizada en los gráficos de Kaplan-Meier.
+
+```{r}
+survfit2(Surv(edad_madre, bajodepeso) ~ 1, data = bajo_pesoo) |> 
+  ggsurvfit() + 
+  labs(
+    x = "Edad de la madre (años)",
+    y = "Probabilidad de no bajo peso"
+  ) + 
+  add_censor_mark()
+```
+
+CONCLUSION:
+
+La curva de supervivencia estimada muestra que la probabilidad de que el bebé no presente bajo peso al nacer es alta en madres jóvenes, pero tiende a disminuir conforme aumenta la edad materna. Especialmente a partir de los 30 años, el riesgo de bajo peso parece incrementarse de forma más marcada. Estos resultados sugieren que la edad materna podría estar asociada con el riesgo de bajo peso neonatal.
+
+La función `add_confidence_interval()` añade los intervalos de confianza al 95% (sombreado en gris) para las estimaciones de probabilidad de supervivencia.
+
+```{r}
+survfit2(Surv(edad_madre, bajodepeso) ~ 1, data = bajo_pesoo) |> 
+  ggsurvfit() + 
+  labs(
+    x = "Edad de la madre (años)",
+    y = "Probabilidad de no bajo peso"
+  ) + 
+  add_censor_mark() + 
+  add_confidence_interval() + 
+  add_risktable()
+```
+
+CONCLUSION:
+
+La curva Kaplan-Meier muestra que el riesgo de bajo peso al nacer aumenta progresivamente con la edad de la madre. En edades jóvenes menores de 20 años la mayoría de los recién nacidos no presentan bajo peso. Sin embargo, a partir de los 30 años, la probabilidad de bajo peso aumenta de forma notable, llegando a niveles inferiores al 60% en madres de mayor edad. Los intervalos de confianza se amplían en los extremos de edad, indicando mayor incertidumbre en esos rangos debido al menor número de casos disponibles.
+
+**¿Cómo interpretar?**
+
+En la gráfica de Kaplan-Meier generada a partir de los datos de madres y sus recién nacidos, se muestra la probabilidad de no presentar bajo peso al nacer a lo largo de la edad materna (años). La curva es escalonada, ya que representa una función de supervivencia estimada por intervalos de edad: cada descenso indica la ocurrencia de un evento (nacimiento con bajo peso), reduciendo la probabilidad acumulada de no bajo peso.
+
+Las líneas horizontales reflejan la duración de los intervalos de edad entre eventos, mientras que las caídas verticales indican la magnitud de la reducción en la probabilidad de no bajo peso al producirse cada nuevo caso. Las marcas de censura (líneas verticales con símbolo `+`), añadidas con `add_censor_mark()`, señalan aquellas madres cuyos recién nacidos no presentaron bajo peso al nacer dentro del seguimiento considerado. Estos casos censurados no afectan directamente la probabilidad acumulada en el momento de su censura, pero reducen el número de madres en riesgo en los intervalos posteriores.
+
+El intervalo de confianza del 95% (representado mediante las bandas grises alrededor de la curva) proporciona una estimación de la incertidumbre asociada a la probabilidad de no bajo peso en cada punto de edad materna. Se observa que a medida que aumenta la edad de la madre, el intervalo de confianza se vuelve más ancho, es decir, existe mayor incertidumbre en los extremos de edad debido al menor número de casos disponibles.
+
+Finalmente, la tabla de riesgo ubicada bajo la gráfica (generada con `add_risktable()`) muestra el número de madres que permanecen en seguimiento en distintos momentos, lo que facilita la interpretación de la robustez de la estimación de la curva a lo largo de la edad.
+
+## 2.4 Estimación de la supervivencia a x años.
+
+Al analizar datos de supervivencia es común que nos preguntemos, por ejemplo, ¿Cuál es la probabilidad de bajo de peso al naces al año 25 ? Esto lo calculamos a partir de usar la función survfit(), añadiendo el arguemento times.
+
+```{r}
+summary(survfit(Surv(edad_madre, bajodepeso) ~ 1, data = bajo_pesoo), times = 25)
+```
+
+CONCLUSION:
+
+A la edad de 25 años de la madre, la probabilidad estimada de que el recién nacido no presente bajo peso es de aproximadamente 66%, con un intervalo de confianza del 95% que va de 58% a 75%. Esto indica que, aunque la mayoría de los bebés nacen sin bajo peso a esta edad, existe un riesgo acumulado no despreciable de bajo peso neonatal.
+
+```{r}
+survfit2(Surv(edad_madre, bajodepeso) ~ 1, data = bajo_pesoo) |> 
+  ggsurvfit() + 
+  labs(
+    x = "Edad de la madre (años)",
+    y = "Probabilidad de no bajo peso"
+  ) + 
+  add_confidence_interval() + 
+  add_risktable() + 
+  add_quantile(x_value = 25, linewidth = 0.7)
+```
+
+CONCLUSION:
+
+A medida que aumenta la edad de la madre, se observa un incremento progresivo en el riesgo de bajo peso al nacer. A los 25 años la probabilidad de no bajo peso es del 66%, con un intervalo de confianza entre 58% y 75%. Este resultado sugiere que la edad materna podría ser un factor asociado al riesgo de bajo peso neonatal.
+
+### 2.5 Estimación mediana del tiempo de supervivencia
+
+Otro dato importante a estimar es la mediana de supervivencia. Típicamente, los datos de supervivencia no tendrán una distribución normal. Asi que, la mediana es preferida sobre la media aritmética.
+
+```{r}
+survfit(Surv(edad_madre, bajodepeso) ~ 1, data = bajo_pesoo)
+```
+
+CONCLUSION:
+
+La mediana de edad materna en la que se alcanza el 50% de probabilidad acumulada de bajo peso al nacer es de 31 años. Esto significa que, a los 31 años aproximadamente la mitad de las madres han experimentado el evento de bajo peso en sus recién nacidos
+
+```{r}
+survfit2(Surv(edad_madre, bajodepeso) ~ 1, data = bajo_pesoo) |> 
+  ggsurvfit() + 
+  labs(
+    x = "Edad de la madre (años)",
+    y = "Probabilidad de no bajo peso"
+  ) + 
+  add_confidence_interval() + 
+  add_risktable() + 
+  add_quantile(y_value = 0.5, linewidth = 0.7)
+```
+
+CONCLUSION:
+
+La curva de supervivencia muestra que la probabilidad de que un recién nacido no presente bajo peso disminuye a medida que aumenta la edad de la madre. La mediana de edad materna en la que la probabilidad de no bajo peso desciende al 50% es de 31 años. Los resultados sugieren un incremento progresivo del riesgo de bajo peso neonatal con el incremento de la edad materna, especialmente a partir de los 30 años.
+
+## ¿Cómo reportar?
+
+Usando el paquete gtsummary podemos generar una tabla con datos de la supervivencia al año.
+
+```{r}
+theme_gtsummary_language(language = "es")
+```
+
+```{r}
+survfit(Surv(edad_madre, bajodepeso) ~ 1, data = bajo_pesoo) %>% 
+  tbl_survfit(
+    times = 25,
+    label_header = "**Supervivencia a los 25 años de edad materna (IC 95%)**"
+  )
+```
+
+CONCLUSION:
+
+A la edad de 25 años de la madre, la probabilidad de que el recién nacido no presente bajo peso es del 66% (IC 95%: 58% a 75%). Esto implica que, para esta edad materna, alrededor de un tercio de los nacimientos corresponden a recién nacidos con bajo peso.
+
+```{r}
+survfit(Surv(edad_madre, bajodepeso) ~ 1, data = bajo_pesoo) |> 
+  tbl_survfit(
+    probs = 0.5,
+    label_header = "**Edad materna donde la probabilidad de no bajo peso es 50% (IC 95%)**"
+  )
+
+```
+
+CONCLUSION:
+
+La edad materna estimada en la que la probabilidad acumulada de no bajo peso al nacer alcanza el 50% es de 31 años. Esto indica que a partir de los 31 años, más de la mitad de las madres presentan riesgo acumulado de bajo peso neonatal. El límite superior no pudo ser calculado debido a la escasez de datos en edades maternas más avanzadas.
+
+## 1.1 Comparando tiempos de supervivencia entre dos grupos
+
+En el conjunto de datos `cancer_pulmon` se incluyen tanto hombres como mujeres. Un análisis de interés consiste en evaluar si los tiempos de supervivencia difieren significativamente entre ambos grupos. Para ello, se utiliza la función `survdiff()`, que permite aplicar la prueba de log-rank y estimar si existen diferencias en las curvas de supervivencia.
+
+```{r}
+survdiff(Surv(edad_madre, bajodepeso) ~ fuma, data = bajo_pesoo)
+```
+
+CONCLUSION:
+
+El p-valor de 0.03 indica que existe una diferencia estadísticamente significativa entre los dos grupos de madres (fumadoras vs no fumadoras) respecto al riesgo de bajo peso.
+
+Los resultados del test log-rank muestran que existe una diferencia estadísticamente significativa p es 0.03 en la probabilidad de bajo peso al nacer según el hábito de fumar de la madre. Las madres fumadoras presentan un mayor riesgo acumulado de bajo peso neonatal en comparación con las madres no fumadoras.
+
+El siguiente gráfico de Kaplan-meier muestra el resultado de la prueba de log-rank.
+
+```{r}
+survfit2(Surv(edad_madre, bajodepeso) ~ fuma, data = bajo_pesoo) |> 
+  ggsurvfit() + 
+  labs(
+    x = "Edad de la madre (años)",
+    y = "Probabilidad de no bajo peso"
+  ) + 
+  add_confidence_interval() + 
+  add_risktable() + 
+  add_pvalue(caption = "Log-rank {p.value}")
+```
+
+CONCLUSION:
+
+El análisis de Kaplan-Meier muestra que las madres fumadoras presentan un mayor riesgo acumulado de bajo peso al nacer en comparación con las no fumadoras. Las curvas de supervivencia divergen progresivamente con la edad materna, evidenciando que el hábito de fumar está asociado a una disminución más acelerada en la probabilidad de no bajo peso. Esta diferencia es estadísticamente significativa (Log-rank p = 0.034), indicando un efecto negativo del tabaquismo sobre el riesgo de bajo peso neonatal.
+
+# 3 El modelo de regresión de Cox
+
+La prueba de log-rank no ofrece una medida de efecto y solo permite evaluar una única variable independiente a la vez. Sin embargo, en investigación suele ser necesario cuantificar el tamaño del efecto de una o varias variables, e incluso realizar un análisis multivariable, aspecto que abordaremos en la siguiente sesión. Para este propósito, el modelo de regresión de Cox es una herramienta adecuada para analizar datos con desenlaces de supervivencia.
+
+En R, este modelo se puede ajustar utilizando la función `coxph()` del paquete **survival**.
+
+## 3.1 El dataset para este ejercicio
+
+El dataset bajo_peso contiene datos de 189 individuos. Para el primer ejecicio haremos uso de las siguientes 3 variables:
+
+-   edad_madre : sólo a modo de práctica, como si la edad fuera tiempo de seguimiento; no es lo usual en supervivencia, pero para practicar el código sirve
+-   bajo_peso: indica si el parcipante tuvo el evento o si fue censurado (0=censura, 1=evento).
+-   fuma: para ver si el fumar afecta en la baja de peso
+
+Usaremos a la variable tipo fumador
+
+```{r}
+coxph(Surv(edad_madre, bajodepeso) ~ fuma, data = bajo_pesoo)
+```
+
+CONCLUSION:
+
+Indica que el hábito de fumar se asocia significativamente con el riesgo de bajo peso neonatal. Las madres fumadoras presentan un riesgo 1.72 veces mayor de tener un recién nacido con bajo peso en comparación con las madres no fumadoras.
+
+## 3.2 Interpretación y reporte
+
+Entre los resultados, el valor p indica que existe una asociación estadísticamente significativa entre la covariable fumador y el riesgo de bajo peso neonatal. El coeficiente y su intervalo de confianza al 95%, ambos en escala exponenciada, son las medidas de interés, ya que expresan la razón de riesgos (Hazard Ratio, HR), que es el valor que se reporta habitualmente en un informe científico.
+
+En este caso, el modelo de regresión de Cox muestra que las madres fumadoras presentan un riesgo 1.72 veces mayor de tener un recién nacido con bajo peso . Este resultado indica que el hábito de fumar está asociado a un incremento significativo del riesgo de bajo peso al nacer.
+
+Estas tablas de resultados pueden obtenerse con la función tbl_regression() del paquete gtsummary, utilizando la opción exponentiate = TRUE para mostrar directamente la razón de riesgos (HR), en lugar del logaritmo del riesgo.
+
+```{r}
+coxph(Surv(edad_madre, bajodepeso) ~ fumador, data = bajo_pesoo) %>% 
+  tbl_regression(exp = TRUE)
+```
+
+CONCLUSION:
+
+En esta tabla, el HR (Hazard Ratio) representa la razón de tasas de ocurrencia del evento de bajo peso al nacer entre los dos grupos de madres (fumadoras vs no fumadoras) en un momento dado. Se interpreta como la tasa instantánea de ocurrencia del evento (bajo peso) en aquellas madres que aún están en riesgo (es decir, que todavía no han tenido un hijo con bajo peso a esa edad).
+
+Un HR menor a 1 indicaría una menor tasa de ocurrencia del evento (menor riesgo de bajo peso), mientras que un HR mayor a 1 indica una tasa de ocurrencia mayor.
+
+En la presente tabla, el HR estimado es 1.72, lo que implica que, en cualquier momento, las madres fumadoras presentan una tasa de ocurrencia de bajo peso 72% mayor que las madres no fumadoras.
+
+En otras palabras, el hábito de fumar durante el embarazo se asocia con un riesgo instantáneo significativamente mayor de bajo peso neonatal en comparación con las madres no fumadoras, según los datos analizados. Esta diferencia es estadísticamente significativa (p = 0.037), lo que respalda la existencia de una verdadera asociación en la población estudiada.
+
+### 3.3 Reporte para multiple variables
+
+Es frecuente que en un estudio que incluya datos de supervivencia sea de interés evaluar multiples covariables. En R, usando la función `tbl_uvregression()` podemos generar modelos univariables simples para todas las covariables. A cambio, obtenemos la HR cruda para todas las covariables de interés.
+
+```{r}
+
+```
+
+```{r}
+tabla_bajodepeso <- bajo_pesoo |> 
+  tbl_uvregression(
+    include = c(fumador, peso_madre, hipertension),
+    y = Surv(edad_madre, bajodepeso),
+    method = coxph,
+    exponentiate = TRUE,
+    conf.int = TRUE,
+    hide_n = TRUE,
+    add_estimate_to_reference_rows = FALSE,
+    pvalue_fun = ~ style_pvalue(.x, digits = 3),
+    estimate_fun = ~ style_number(.x, digits = 2),
+    label = list(
+      fumador ~ "Hábito de fumar",
+      peso_madre ~ "Peso de la madre (kg)",
+      hipertension ~ "Hipertensión (sí/no)"
+    )
+  ) |> 
+  bold_p(t = 0.05) |> 
+  modify_header(
+    estimate = "**HR no ajustado**", 
+    p.value = "**Valor p**"
+  )
+```
+
+```{r}
+tabla_bajodepeso
+```
+
+CONCLUSION:
+
+En el análisis univariable de regresión de Cox, el hábito de fumar durante el embarazo y el menor peso materno se asociaron significativamente con un mayor riesgo de bajo peso neonatal. Las madres fumadoras presentan un riesgo 1.72 veces mayor de bajo peso, mientras que un mayor peso materno se asocia con una disminución del riesgo (HR: 0.98 por cada kg adicional IC 95%: 0.97 a0.99 p es 0.003 La hipertensión mostró una tendencia hacia mayor riesgo (HR: 2.18), aunque no alcanzó significación estadística p es 0.055

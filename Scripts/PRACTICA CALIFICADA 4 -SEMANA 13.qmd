@@ -1,0 +1,263 @@
+---
+title: "G4_SEMANA 13"
+format: html
+editor: visual
+---
+
+## PRACTICA CALIFICADA 4 SEMANA 13
+
+➢ Malqui Pariona, Kevin
+
+➢ Ordoya Poma, Alisson Marilyn
+
+➢ Ortega Hernández, Vanessa Jazmmin
+
+➢ Torres Castillo, Shireldy Yanet
+
+➢ Vivanco Quispe, Rodrigo Aron
+
+### Instalar los paquetes
+
+```{r}
+install.packages("factoextra")
+install.packages("cluster")
+```
+
+### Cargar paquetes
+
+```{r}
+library(factoextra)
+library(cluster)
+library(here)
+library(rio)
+library(tidyverse)
+```
+
+# 1 ¿Cómo aplicaremos Machine Learning a esta sesión?
+
+En investigaciones perinatales es común recolectar múltiples variables maternas y neonatales, como la edad y peso de la madre, antecedentes clínicos, hábitos como el tabaquismo, y el número de visitas médicas durante el embarazo. Estas variables pueden estar relacionadas entre sí y con el peso del recién nacido.
+
+Por ejemplo, madres con antecedentes de hipertensión o partos prematuros podrían tener mayor riesgo de tener bebés con bajo peso al nacer. Excluir variables o simplificar demasiado puede llevar a pérdida de información relevante.
+
+Para estas situaciones, se pueden usar técnicas de *machine learning* como el agrupamiento (clustering), que permiten analizar simultáneamente múltiples características y descubrir grupos de madres o nacimientos con perfiles similares. Esto puede ayudar a identificar patrones clínicos útiles para la prevención o intervención.
+
+## 1.1 Uso de las técnicas de agrupamiento para responden preguntas de investigación en salud
+
+Las técnicas de agrupamiento permiten clasificar observaciones, como nacimientos o madres, en grupos según la similitud de variables clínicas, demográficas y conductuales. Así, podemos identificar perfiles característicos de madres o gestaciones.
+
+En este caso, los grupos encontrados podrían ayudarnos a explorar si existen combinaciones de factores (edad materna, tabaquismo, visitas médicas, etc.) que se asocian con mayor riesgo de bajo peso al nacer. Estos perfiles podrían ser útiles para enfocar estrategias de prevención o para diseñar futuras intervenciones.
+
+# 2 Análisis de agrupamiento herarquico (Hierarchical Clustering)
+
+## 2.1 Sobre el problema para esta sesión
+
+El dataset de esta sesión contiene información de 189 nacimientos, con variables maternas como edad, peso, tabaquismo, hipertensión, visitas médicas prenatales, entre otras. El objetivo del análisis es aplicar el método de agrupamiento jerárquico para identificar grupos de madres o nacimientos con características similares, lo que permitirá explorar perfiles de riesgo relacionados con el bajo peso al nacer y posibles patrones que orienten acciones de prevención o intervención clínica
+
+## 2.2 El dataset para esta sesión
+
+Para ilustrar el análisis usaremos el dataset `bajo_peso`, que contiene información de 189 nacimientos. Este incluye variables maternas como la edad, el peso, la raza, el hábito de fumar, la presencia de hipertensión o irritabilidad uterina, así como el número de partos prematuros y de visitas médicas prenatales. Además, se incluye el peso del recién nacido, que permite identificar si presentó bajo peso al nacer. Estas variables permitirán explorar agrupamientos de madres con perfiles similares y su relación con desenlaces perinatales
+
+### 2.2.1 Importando los datos
+
+```{r}
+bajopeso_data <- import(here("data", "bajo_peso.csv"))
+```
+
+## 2.3 Preparación de los datos
+
+### 2.3.1 Solo datos numéricos
+
+Para el análisis de agrupamiento jerárquico en esta sesión, utilizaremos únicamente las variables numéricas. Si bien es posible incluir variables categóricas en esta técnica, en este ejercicio no se cubrirá esa opción. A continuación, eliminaremos las variables categóricas como raza, fuma, hipertension, irritabilidad_utero y bajo_peso, ya que no son numéricas. El identificador se mantendrá implícito por la posición de cada fila.
+
+```{r}
+bajopeso_data_1 <- bajopeso_data |>
+  mutate(id = row_number()) |>                     # genera id del 1 al 189
+  select(-bajo_peso, -raza, -fuma, -hipertension, -irritabilidad_utero) |>
+  column_to_rownames("id")                         # usa 'id' como nombre de fila
+```
+
+### 2.3.2 La importancia de estandarizar
+
+Antes de aplicar el análisis de agrupamiento jerárquico, es necesario estandarizar las variables numéricas, ya que cada una tiene unidades distintas (por ejemplo, edad en años, peso en libras, visitas médicas en cantidad). Si no se estandarizan, las variables con rangos más grandes podrían influir desproporcionadamente en los resultados del clustering.
+
+La estandarización convierte todas las variables a una escala común con media cero y desviación estándar uno, usando funciones como `scale()` en R. Esto garantiza que todas las variables contribuyan por igual al análisis.
+
+```{r}
+bajopeso_data_escalado = scale(bajopeso_data_1)
+```
+
+Un vistazo a los datos antes del escalamiento:
+
+```{r}
+head(bajopeso_data_1)
+```
+
+y un vistazo después del escalamiento:
+
+```{r}
+head(bajopeso_data_escalado)
+```
+
+Cada número indica cuántas desviaciones estándar por encima o por debajo del promedio se encuentra ese caso en esa variable:
+
+Valores cercanos a 0: están alrededor del promedio
+
+Valores positivos (\> 0): están por encima del promedio de esa variable
+
+Valores negativos (\< 0): están por debajo del promedio
+
+## 2.4 Cálculo de distancias
+
+Dado que uno de los pasos es encontrar "cosas similares", necesitamos definir "similar" en términos de distancia. Esta distancia la calcularemos para cada par posible de objetos (participantes) en nuestro dataset. Por ejemplo, si tuvieramos a los pacientes A, B y C, las distancia se calcularían para A vs B; A vs C; y B vs C. En R, podemos utilizar la función `dist()` para calcular la distancia entre cada par de objetos en un conjunto de datos. El resultado de este cálculo se conoce como matriz de distancias o de disimilitud.
+
+```{r}
+dist_bajopeso_data <- dist(bajopeso_data_escalado, method = "euclidean")
+```
+
+## 2.4.1 (opcional) Visualizando las distancias euclidianas con un mapa de calor
+
+Una forma de visualizar si existen patrones de agrupamiento es usando mapas de calor (heatmaps). En R usamos la función `fviz_dist()` del paquete factoextra para crear un mapa de calor.
+
+```{r}
+fviz_dist(dist_bajopeso_data)
+```
+
+Cada celda del mapa representa la distancia euclidiana entre dos observaciones (madres/nacimientos) según sus variables numéricas estandarizadas.
+
+Los colores indican el valor de esa distancia:
+
+Color azul oscuro: alta distancia son observaciones muy diferentes entre sí.
+
+Color blanco/rosado: distancia baja son observaciones muy similares.
+
+La diagonal central (de esquina inferior izquierda a superior derecha) siempre será color claro, porque representa la distancia de cada individuo consigo mismo (0).
+
+## 2.5 El método de agrupamiento: función de enlace (linkage)
+
+El agrupamiento jerárquico comienza uniendo las observaciones más similares, como madres con perfiles prenatales parecidos. Luego, se va decidiendo cómo medir la distancia entre los nuevos grupos y los ya existentes, lo cual depende de la función de enlace utilizada.
+
+Entre los métodos disponibles están el enlace simple, completo, promedio, centroides y el método de varianza mínima de Ward, que es el que usaremos aquí. Este método busca formar grupos de madres con características similares minimizando la varianza interna dentro de cada clúster, lo que lo hace adecuado para encontrar grupos bien definidos en este tipo de datos clínicos.
+
+```{r}
+dist_link_bajopeso_data <- hclust(d = dist_bajopeso_data, method = "ward.D2")
+```
+
+## 2.7 Dendrogramas para la visualización de patrones
+
+Los dendrogramas es una representación gráfica del árbol jerárquico generado por la función `hclust()`.
+
+```{r}
+fviz_dend(dist_link_bajopeso_data, cex = 0.7)
+```
+
+Visualmente, puedes observar que:
+
+Se forman alrededor de 3 a 5 grupos grandes, dependiendo del nivel (altura) en que cortes el árbol.
+
+Si trazas una línea horizontal a una altura de \~10, verás que el árbol se divide en 3 grandes ramas, lo cual sugiere una solución de 3 clústeres razonable para interpretar.
+
+## 2.8 ¿Cúantos grupos se formaron en el dendrograma?
+
+Uno de los problemas con la agrupación jerárquica es que no nos dice cuántos grupos hay ni dónde cortar el dendrograma para formar grupos. Aquí entra en juego la decisión del investigador a partir de analizar el dendrograma. Para nuestro dendrograma, es claro que el dendrograma muestra tres grupos. En el código de abajo, el argumento k = 3 define el número de clusters.
+
+```{r}
+fviz_dend(dist_link_bajopeso_data,
+          k = 3,
+          cex = 0.5,
+          k_colors = c("#4CAF50", "#FF9800", "#9E9E9E"),  # verde, naranja, gris
+          color_labels_by_k = TRUE,
+          rect = TRUE)
+```
+
+Clúster verde: madres jóvenes, con poco control prenatal o bajo peso, cuyos bebés podrían tener riesgo más alto de bajo peso.
+
+Clúster naranja: grupo mixto con características intermedias.
+
+Clúster gris: madres con más visitas médicas, mayor edad o peso, cuyos bebés podrían tener mejores desenlaces.
+
+# 3 Agrupamiento con el algoritmo K-Means
+
+El método de agrupamiento (usando el algoritmo) K-means es la técnica de machine learning más utilizado para dividir un conjunto de datos en un número determinado de k grupos (es decir, k clústeres), donde k representa el número de grupos predefinido por el investigador. Esto contrasta con la técnica anterior, dado que aquí sí iniciamos con un grupo pre-definido cuya idoniedad (de los grupos) puede ser evaluado. En detalle, el esta técnica clasifica a los objetos (participantes) del dataset en múltiples grupos, de manera que los objetos dentro de un mismo clúster sean lo más similares posible entre sí (alta similitud intragrupo), mientras que los objetos de diferentes clústeres sean lo más diferentes posible entre ellos (baja similitud intergrupo). En el agrupamiento k-means, cada clúster se representa por su centro (centroide), que corresponde al promedio de los puntos asignados a dicho clúster.
+
+Aquí como funciona el algoritmo de K-Means
+
+1.  Indicar cuántos grupos (clústeres) se quieren formar. Por ejemplo, si se desea dividir a los pacientes en 3 grupos según sus características clínicas, entonces K=3.
+2.  Elegir aleatoriamente K casos del conjunto de datos como centros iniciales. Por ejemplo, R selecciona al azar 3 pacientes cuyas características (edad, IMC, creatinina, etc.) servirán como punto de partida para definir los grupos.
+3.  Asignar cada paciente al grupo cuyo centro esté más cerca, usando la distancia euclidiana. Es como medir con una regla cuál centroide (paciente promedio) está más próximo a cada paciente en función de todas sus variables.
+4.  Calcular un nuevo centro para cada grupo. Es decir, calcular el promedio de todas las variables de los pacientes que quedaron en ese grupo. Por ejemplo, si en el grupo 1 quedaron 40 pacientes, el nuevo centroide será el promedio de la edad, IMC, creatinina, etc., de esos 40 pacientes. Este centroide es un conjunto de valores (uno por cada variable).
+5.  Repetir los pasos 3 y 4 hasta que los pacientes dejen de cambiar de grupo o hasta alcanzar un número máximo de repeticiones (en R, por defecto son 10 repeticiones). Esto permitirá que los grupos finales sean estables.
+
+## 3.1 El problema y dataset para este ejercicio
+
+Usaremos el mismo dataset y el mismo problema que el que empleamos en el ejercicio anterior (para Agrupamiento Jerárquico).
+
+## 3.2 Estimando el número óptimo de clusters
+
+Como indiqué arriba, el método de agrupamiento k-means requiere que el usuario especifique el número de clústeres (grupos) a generar. Una pregunta fundamental es: ¿cómo elegir el número adecuado de clústeres esperados (k)?
+
+Aquí muestro una solución sencilla y popular: realizar el agrupamiento k-means probando diferentes valores de k (número de clústeres). Luego, se grafica la suma de cuadrados dentro de los clústeres (WSS) en función del número de clústeres. En R, podemos usar la función fviz_nbclust() para estimar el número óptimo de clústeres.
+
+Primero escalamos los datos:
+
+```{r}
+bajopeso_data_escalado = scale(bajopeso_data_1)
+```
+
+Ahora graficamos la suma de cuadrados dentro de los gráficos
+
+```{r}
+fviz_nbclust(bajopeso_data_escalado, kmeans, nstart = 25, method = "wss") +
+  geom_vline(xintercept = 3, linetype = 2)
+```
+
+La curva desciende rápidamente al principio, lo que indica que agregar más grupos reduce fuertemente la variabilidad interna.
+
+A partir de k = 3, la curva comienza a aplanarse: ese punto de inflexión es el "codo", donde se logra un buen balance entre simplicidad (menos grupos) y homogeneidad (grupos más compactos).
+
+Por eso, se ha trazado una línea vertical en k = 3, lo que sugiere que tres clústeres es el número óptimo para tu dataset.
+
+## 3.3 Cálculo del agrupamiento k-means
+
+Dado que el resultado final del agrupamiento k-means es sensible a las asignaciones aleatorias iniciales, se especifica el argumento `nstart = 25`. Esto significa que R intentará 25 asignaciones aleatorias diferentes y seleccionará la mejor solución, es decir, aquella con la menor variación dentro de los clústeres. El valor predeterminado de `nstart` en R es 1. Sin embargo, se recomienda ampliamente utilizar un valor alto, como 25 o 50, para obtener un resultado más estable y confiable. El valor empleado aquí, fue usado para determinar el número de clústeres óptimos.
+
+```{r}
+set.seed(123)
+km_res <- kmeans(bajopeso_data_escalado, 3, nstart = 25)
+```
+
+```{r}
+km_res
+```
+
+Se aplicó un análisis para agrupar a las madres y sus bebés en base a características como la edad, el peso, si tuvieron partos prematuros, cuántas visitas médicas hicieron durante el embarazo y el peso del recién nacido. El análisis formó tres grupos diferentes.
+
+El primer grupo fue el más grande. En él, las madres eran más jóvenes y fueron menos veces al médico durante el embarazo. Sus bebés nacieron con un peso un poco menor al promedio. El segundo grupo, aunque más pequeño, fue el más preocupante: las madres tenían más partos prematuros y sus bebés nacieron con pesos muy bajos. El tercer grupo fue el más favorable: las madres eran mayores, con mejor control médico y sus bebés nacieron con buen peso.
+
+Este análisis ayuda a identificar qué tipo de madres podrían necesitar más apoyo o seguimiento durante el embarazo para prevenir riesgos en sus bebés.
+
+## 3.4 Visualización de los clústeres k-means
+
+Al igual que el análisis anterior, los datos se pueden representar en un gráfico de dispersión, coloreando cada observación o paciente según el clúster al que pertenece. El problema es que los datos contienen más de dos variables, y surge la pregunta de qué variables elegir para representar en los ejes X e Y del gráfico. Una solución es reducir la cantidad de dimensiones aplicando un algoritmo de reducción de dimensiones, como el Análisis de Componentes Principales (PCA). El PCA transforma las 52 variables originales en dos nuevas variables (componentes principales) que pueden usarse para construir el gráfico.
+
+La función `fviz_cluster()` del paquete factoextra se puede usar para visualizar los clústeres generados por k-means. Esta función toma como argumentos los resultados del k-means y los datos originales (hemo_data_escalado).
+
+```{r}
+fviz_cluster(
+  km_res,
+  data = bajopeso_data_escalado,
+  palette = c("#4CAF50", "#FF9800", "#9E9E9E"),  
+  ellipse.type = "euclid",
+  repel = TRUE,
+  ggtheme = theme_minimal()
+)
+```
+
+Se realizó una visualización de los clústeres identificados por el algoritmo k-means mediante un gráfico de dispersión con reducción de dimensiones a través de Análisis de Componentes Principales (PCA). Este gráfico muestra cómo se distribuyen los nacimientos agrupados según sus características numéricas, destacando los tres grupos definidos previamente
+
+El primer grupo (representado en color verde) es el más numeroso. Está formado por madres más jóvenes, con menos visitas médicas durante el embarazo y recién nacidos con un peso levemente inferior al promedio. Este grupo representa un perfil intermedio, con algunas condiciones que podrían asociarse a mayor riesgo, pero sin características clínicas severas
+
+El segundo grupo (color naranja) es más pequeño y disperso. Incluye madres que presentan un mayor número de partos prematuros y cuyos recién nacidos tienden a tener pesos más bajos. Este grupo destaca por concentrar las condiciones clínicas más adversas, por lo que puede interpretarse como el grupo de mayor riesgo perinatal
+
+El tercer grupo (color gris) es más compacto y se encuentra separado de los demás. Está compuesto por madres de mayor edad, con mejor control prenatal y recién nacidos con mayor peso al nacer. Representa el perfil más favorable, con condiciones clínicas que podrían asociarse a una menor probabilidad de complicaciones
+
+En conjunto, esta visualización confirma que los grupos identificados no solo existen de forma estadística, sino que también se diferencian claramente en sus características clínicas, lo que refuerza la utilidad del agrupamiento como herramienta para identificar perfiles materno-perinatales en una población

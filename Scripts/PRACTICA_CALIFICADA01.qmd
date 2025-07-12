@@ -1,0 +1,128 @@
+---
+title: "PRACTICA 1"
+author: "Grupo 4"
+format: html
+editor: visual
+---
+
+## Grupo 04:
+
+-Malqui Pariona Kevin Martires
+
+-Ordoya Poma Alisson Marilyn
+
+-Ortega Hernandez Vanessa Jazmmin
+
+-Torres Castillo Shireldy Yanet
+
+-Vivanco Quispe Rodrigo Aron
+
+### FUNCIONES
+
+#### **1ERA FUNCION**
+
+Esta función nos permitirá clasificar la temperatura corporal desde una serie de datos de varios pacientes. Para ello evaluará el valor dado, si es menor de 36, lo clasificará como "Hipotermia"; si es menor o igual a 37.5, lo clasificará como "Normal"; si es mayor a 37. 5 por defecto será clasificado como "Fiebre".
+
+```{r}
+#Clasificar temperatura corporal
+
+clasificar_temperatura_df <- function(df, columna_temp) {
+  df$estado_temp <- ifelse(df[[columna_temp]] < 36, "Hipotermia",
+                      ifelse(df[[columna_temp]] <= 37.5, "Normal", "Fiebre"))
+  return(df)
+}
+
+# Datos de ejemplo
+temperaturas <- data.frame(
+  paciente = c("Ana", "Luis", "Carlos"),
+  temperatura = c(35.5, 36.7, 38.2)
+)
+
+# Usar la función
+clasificar_temperatura_df(temperaturas, "temperatura")
+
+```
+
+#### **2DA FUNCION**
+
+Esta función nos permitirá calcular el IMC de los pacientes. Para ello hará uso de valores como peso (kg) y altura(m), con ambos datos calculará el IMC de acuerdo a la fórmula que se ha programado.
+
+```{r}
+#Calcular IMC
+calcular_imc_df <- function(df, col_peso, col_altura) {
+  df$IMC <- round(df[[col_peso]] / (df[[col_altura]]^2), 2)
+  return(df)
+}
+
+# Datos de ejemplo
+pacientes <- data.frame(
+  nombre = c("Ana", "Luis", "Carlos"),
+  peso_kg = c(60, 75, 90),
+  altura_m = c(1.60, 1.75, 1.80)
+)
+
+# Usar la función
+calcular_imc_df(pacientes, "peso_kg", "altura_m")
+```
+
+#### **3RA FUNCION**
+
+Esta función nos permitirá clasificar la presion arterial de los pacientes. Para ello evaluará los valores dados tanto en la presión sistólica (PS) como en la presión diastólica(PD). Si la PS es menor a 90 y la PD es menor a 60, lo clasificará como "Hipotensión"; si la PS es menor o igual a 120 y la PD es menor o igual a 80, lo clasificará como "Normal"; si la PS es menor o igual a 139 y la PD es menor o igual a 89, lo clasificará como "Prehipertension" ; si es mayor por defecto será clasificado como "Hipertensión".
+
+```{r}
+#Interpretar presión arterial
+interpretar_presion_df <- function(df, col_sistolica, col_diastolica) {
+  df$presion_estado <- ifelse(df[[col_sistolica]] < 90 | df[[col_diastolica]] < 60, "Hipotensión",
+                         ifelse(df[[col_sistolica]] <= 120 & df[[col_diastolica]] <= 80, "Normal",
+                         ifelse(df[[col_sistolica]] <= 139 | df[[col_diastolica]] <= 89, "Prehipertensión", "Hipertensión")))
+  return(df)
+}
+
+# Datos de ejemplo
+presiones <- data.frame(
+  paciente = c("Ana", "Luis", "Carlos"),
+  sistolica = c(118, 135, 145),
+  diastolica = c(78, 85, 95)
+)
+
+# Usar la función
+interpretar_presion_df(presiones, "sistolica", "diastolica")
+```
+
+### DESCARGAR E INSTALAR PAQUETES
+
+#### PAQUETE 1
+
+Este paquete es la alternativa más popular a los gráficos de R base. Se basa en el Grammar of Graphics y su mayor ventaja es su flexibilidad, ya que permite crear y personalizar gráficos agregando capas. Con esta librería crearás gráficos de gran calidad de manera muy sencilla.
+
+```{r}
+install.packages("ggplot2"
+```
+
+```{r}
+library(ggplot2)
+```
+
+#### PAQUETE 2
+
+Lubridate se especializa en el manejo de fechas y horas. Facilita el parseo, la manipulación y el cálculo con objetos de tiempo, permitiendo operaciones como sumar días, extraer componentes de fechas y formatear, mejorando la eficiencia en análisis temporales.
+
+```{r}
+install.packages("lubridate")
+```
+
+```{r}
+library(lubridate)
+```
+
+**PAQUETE 3**
+
+El paquete colorespace en R permite trabajar con diferentes espacios de color, facilitando la conversión entre ellos, como RGB, HCL, LAB, entre otros. Proporciona herramientas para crear paletas de colores, mejorar la visualización de datos y ajustar la percepción del color, optimizando la presentación gráfica de análisis y resultados.
+
+```{r}
+install.packages("colorspace")
+```
+
+```{r}
+library(colorspace)
+```

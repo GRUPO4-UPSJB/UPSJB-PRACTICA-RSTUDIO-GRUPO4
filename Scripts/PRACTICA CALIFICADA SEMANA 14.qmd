@@ -1,0 +1,426 @@
+---
+title: "G4_SEMANA 14"
+format: html
+editor: visual
+---
+
+## PRACTICA CALIFICADA 4 SEMANA 14
+
+➢ Malqui Pariona, Kevin
+
+➢ Ordoya Poma, Alisson Marilyn
+
+➢ Ortega Hernández, Vanessa Jazmmin
+
+➢ Torres Castillo, Shireldy Yanet
+
+➢ Vivanco Quispe, Rodrigo Aron
+
+### Instalar los paquetes
+
+```{r}
+install.packages("mice")
+install.packages("ggmice")
+```
+
+### Cargar paquetes
+
+```{r}
+library(mice)
+library(tidyverse)
+library(here)
+library(rio)
+library(ggmice)
+library(gtsummary)
+```
+
+## 1 Datos perdidos en investigación en salud
+
+Es común encontrar datos faltantes en un conjunto de datos. Por ejemplo, al recolectar información a partir de historias clínicas de pacientes en un hospital, algunas variables pueden no estar disponibles porque no fueron medidas, anotadas o solicitadas por el personal de salud. En otro escenario, en estudios que utilizan encuestas, es posible que las personas encuestadas no respondan ciertas preguntas o que las respuestas sean ininteligibles.
+
+Cuando se aplican métodos de regresión en investigaciones en ciencias de la salud, la práctica habitual consiste en eliminar las observaciones que contienen datos faltantes. Esta técnica se conoce como análisis de casos completos, y muchos paquetes estadísticos la implementan por defecto.
+
+## 2 Imputación de datos
+
+Siempre es preferible utilizar todas las observaciones en un análisis de regresión, ya que esto permite obtener estimaciones más precisas y cercanas a la realidad. En esta sesión, aplicaremos una técnica llamada imputación, que consiste en reemplazar los datos perdidos con una estimación de su valor verdadero.
+
+Esta no es una técnica reciente. Enfoques anteriores de imputación —como, por ejemplo, reemplazar los valores perdidos con el promedio de la variable— han sido ampliamente utilizados, pero presentan limitaciones. Estas limitaciones han sido superadas por una técnica más moderna y actualmente muy popular: la imputación múltiple de datos.
+
+## 3 El dataset para este ejercicio
+
+Para ilustrar el proceso de imputación múltiple de datos, utilizaremos el conjunto de datos `bajo_peso`. Este dataset incluye información de nacimientos y características maternas asociadas de 189 , recolectadas de diversas pacientes. Las variables registradas comprenden el estado de bajo peso al nacer (sí o no), la edad de la madre (en años), el peso materno previo al parto, la raza (blanca, afroamericana u otra), el hábito de fumar durante el embarazo (sí o no), el número de partos prematuros previos, la presencia de hipertensión, la irritabilidad uterina, la cantidad de visitas médicas durante la gestación y el peso del recién nacido (en gramos), entre otras. Algunos registros presentan valores faltantes en al menos una de estas variables.
+
+Cargando los datos
+
+```{r}
+data_sm <- import(here("data", "bajo_peso.csv"))
+```
+
+Un vistazo a los datos
+
+```{r}
+head(data_sm)
+```
+
+## 4 Realizando la imputación de datos
+
+### 4.1 ¿Donde estan los valores perdidos?
+
+Es importante saber en qué variables se encuentran los datos antes de iniciar la inputación. Una forma rápida es usando la función `colSums()` es `is.na()`.
+
+```{r}
+colSums(is.na(data_sm))
+```
+
+Incluso mejor, podemos visualizar los datos perdidos en un mapa de calor usando la función `plot_pattern()` de **ggmice**.
+
+```         
+```
+
+```{r}
+data_sm |>
+  select(
+    bajo_peso,
+    edad_madre,
+    peso_madre,
+    raza,
+    fuma,
+    partos_prematuros,
+    hipertension,
+    irritabilidad_utero,
+    visitas_medicas,
+    peso_nacer
+  ) |>
+  ggmice::plot_pattern(
+    square = TRUE,
+    rotate = TRUE
+  )
+```
+
+**CONCLUSION:**
+
+No existen datos perdidos en tu dataset data_sm. Esto se confirma por lo siguiente:
+
+Todas las columnas están completamente azules (color que indica datos observados).
+
+En el eje "Number of missing entries per column", todos los valores son 0.
+
+El total de registros es 189 (según la barra de frecuencia a la izquierda), y todos esos registros tienen información completa para todas las variables seleccionadas.
+
+En la leyenda, solo aparece la categoría "observed" y no hay rastro de celdas blancas o vacías.
+
+## Simulación de valores perdidos
+
+```{r}
+# Fijar semilla para reproducibilidad
+set.seed(42)
+
+# Número total de filas
+n <- nrow(data_sm)
+
+# Porcentaje de datos faltantes a simular
+prop_na <- 0.10  # 10%
+
+# Crear copia del dataset
+data_sm <- data_sm |>
+  mutate(
+    peso_madre = replace(peso_madre, sample(1:n, prop_na * n), NA),
+    visitas_medicas = replace(visitas_medicas, sample(1:n, prop_na * n), NA)
+  )
+```
+
+```{r}
+data_sm |>
+  select(
+    bajo_peso,
+    edad_madre,
+    peso_madre,
+    raza,
+    fuma,
+    partos_prematuros,
+    hipertension,
+    irritabilidad_utero,
+    visitas_medicas,
+    peso_nacer
+  ) |>
+  ggmice::plot_pattern(
+    square = TRUE,
+    rotate = TRUE
+  )
+```
+
+**CONCLUSION:**
+
+En el análisis realizado mediante el gráfico de patrón de valores perdidos, se observa que el conjunto de datos presenta un total de 36 celdas con valores faltantes. Estos valores ausentes se encuentran específicamente en dos variables: peso_madre y visitas_medicas, con 18 casos faltantes en cada una. El resto de las variables incluidas en el estudio (bajo_peso, edad_madre, raza, fuma, partos_prematuros, hipertension, irritabilidad_utero y peso_nacer) no presentan pérdida de datos.
+
+La mayoría de los registros (155 observaciones) tienen información completa para todas las variables. Sin embargo, se identifican 16 observaciones con datos perdidos en una sola de las variables (peso_madre o visitas_medicas) y 2 observaciones con datos faltantes en ambas variables de forma simultánea. Esta distribución puede sugerir un patrón parcialmente estructurado de pérdida.
+
+### 4.2 Comparación de participantes con y sin valores perdidos
+
+Una buena práctica antes de iniciar la imputación de datos es también evaluar cómo difieren los valores de las otras variables entre el grupo de participantes con valores perdidos y el grupo sin valores perdidos. Esto es importante debido a que puede darnos pistas de si en realidad es necesaria la imputación o, dicho de otra forma, si es seguro usar el análisis de casos completos. ¿Cómo? Si la distribución de las otras variables no difiere entre el grupo con valores perdidos y el grupo sin valores perdidos, entonces no es necesario la imputación de datos. Evaluemos esto en nuestro dataset para las variables `peso_madre` y `visitas_medicas`.
+
+```{r}
+# Tabla para peso_madre
+tabla_peso_madre <- data_sm |>
+  dplyr::select(
+    edad_madre,
+    peso_madre,
+    raza,
+    fuma,
+    partos_prematuros,
+    hipertension,
+    irritabilidad_utero,
+    visitas_medicas,
+    peso_nacer,
+    bajo_peso
+  ) |>
+  mutate(missing = factor(
+    is.na(peso_madre),
+    levels = c(FALSE, TRUE),
+    labels = c("Sin valores perdidos", "Con valores perdidos")
+  )) |>
+  tbl_summary(
+    by = missing,
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})",
+      all_categorical() ~ "{n} ({p}%)"
+    )
+  ) |>
+  modify_header(
+    label = "**Variable**",
+    all_stat_cols() ~ "**{level}**<br>N = {n} ({style_percent(p, digits = 1)}%)"
+  ) |>
+  modify_caption("Características de los participantes según valor perdido en peso_madre") |>
+  bold_labels()
+
+# Tabla para visitas_medicas
+tabla_visitas <- data_sm |>
+  dplyr::select(
+    edad_madre,
+    peso_madre,
+    raza,
+    fuma,
+    partos_prematuros,
+    hipertension,
+    irritabilidad_utero,
+    visitas_medicas,
+    peso_nacer,
+    bajo_peso
+  ) |>
+  mutate(missing = factor(
+    is.na(visitas_medicas),
+    levels = c(FALSE, TRUE),
+    labels = c("Sin valores perdidos", "Con valores perdidos")
+  )) |>
+  tbl_summary(
+    by = missing,
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})",
+      all_categorical() ~ "{n} ({p}%)"
+    )
+  ) |>
+  modify_header(
+    label = "**Variable**",
+    all_stat_cols() ~ "**{level}**<br>N = {n} ({style_percent(p, digits = 1)}%)"
+  ) |>
+  modify_caption("Características de los participantes según valor perdido en visitas_medicas") |>
+  bold_labels()
+
+# Unir ambas tablas
+tabla <- tbl_merge(
+  tbls = list(tabla_peso_madre, tabla_visitas),
+  tab_spanner = c("**Peso de la madre**", "**Visitas médicas**")
+)
+
+```
+
+```{r}
+tabla
+```
+
+**CONCLUSION:**
+
+En el caso de `peso_madre`, se observa que el 90.5% de los participantes (171 personas) tienen datos completos, mientras que el 9.5% (18 personas) presentan valores perdidos. La edad promedio de las madres en ambos grupos es similar: 23 años en el grupo sin valores perdidos y 24 años en el grupo con datos faltantes. En cuanto a la variable `raza`, se distribuyen de manera parecida: en el grupo sin datos perdidos, el 49% son blancas, 13% afroamericanas y 37% de otra raza. En el grupo con datos faltantes, el 67% son blancas, 17% afroamericanas y 17% de otra raza.
+
+Para `visitas_medicas`, también se observa una proporción del 90.5% con datos completos y 9.5% con datos faltantes. La edad materna promedio vuelve a ser la misma entre grupos, con 23 y 24 años respectivamente. La distribución por raza, tabaquismo, partos prematuros, hipertensión e irritabilidad uterina también se mantiene estable entre ambos grupos. En cuanto al resultado neonatal, el peso al nacer es levemente mayor en el grupo con pérdida en `peso_madre` (3114 g frente a 2927 g), y un poco menor en el grupo con pérdida en `visitas_medicas` (2851 g frente a 2954 g), aunque las diferencias no parecen clínicamente relevantes. La proporción de bajo peso al nacer fue exactamente la misma en ambos grupos: 32% en quienes tienen datos y 28% en quienes tienen datos faltantes.
+
+### 4.3 ¿Qué variables debo incluir en el proceso de imputación?
+
+Debemos incluir todas las variables que se utilizarán en los análisis posteriores, incluso aquellas que no presentan valores perdidos. La razón es que el modelo de imputación debe ser tan complejo como el análisis que se realizará posteriormente. De lo contrario, se perderá información relevante de las demás variables. Además, aunque algunas variables no tengan valores faltantes, su inclusión en el modelo de imputación es útil porque aportan información que mejora la estimación de los valores imputados. Recuerda además que las variables categóricas deben ser de tipo factor. El código de abajo selecciona las variables y transforma las variables categóricas relevantes a factor.
+
+```{r}
+input_data <-
+  data_sm |>
+  dplyr::select(
+    bajo_peso,
+    edad_madre,
+    peso_madre,
+    raza,
+    fuma,
+    partos_prematuros,
+    hipertension,
+    irritabilidad_utero,
+    visitas_medicas,
+    peso_nacer
+  ) |>
+  mutate(
+    bajo_peso = as.factor(bajo_peso),
+    raza = as.factor(raza),
+    fuma = as.factor(fuma),
+    hipertension = as.factor(hipertension),
+    irritabilidad_utero = as.factor(irritabilidad_utero)
+  )
+```
+
+### 4.4 La función `mice()` para imputar datos
+
+Para imputar datos utilizaremos la función `mice()` del paquete del mismo nombre. Entre sus argumentos, debemos especificar:
+
+-   el número de imputaciones con `m`,
+-   una semilla (`seed`) para que los resultados sean reproducibles, y
+-   el método de imputación con `method`.
+
+Con respecto a este último argumento, emplearemos el método `"pmm"` para variables continuas y `"logreg"` para variables binarias. Para las variables que **no presentan valores perdidos**, simplemente se colocan comillas vacías (`""`).
+
+En nuestro caso, el conjunto de datos contiene 10 variables, de las cuales 2 (`peso_madre` y `visitas_medicas`) presentan valores perdidos. Las variables están en el siguiente orden:
+
+```{r}
+names(input_data)
+```
+
+El método de imputación lo indicaremos con el argumento `method`, en el mismo orden que aparecen las variables en el dataset:
+
+```{r}
+data_imputada <-
+  mice(
+    input_data,
+    m = 20,
+    method = c(
+      "logreg",      
+      "",            
+      "pmm",         
+      "",           
+      "",            
+      "",             
+      "",          
+      "",            
+      "pmm",         
+      ""              
+    ),
+    maxit = 20,
+    seed = 3,
+    print = FALSE
+  )
+```
+
+```{r}
+data_imputada
+```
+
+**CONCLUSION:**
+
+El resultado mostrado corresponde a la salida generada por la función `mice()` luego de realizar 20 imputaciones múltiples sobre el conjunto de datos. En la parte superior se especifica cuántas imputaciones se realizaron y qué método se usó para cada variable. En este caso, el método "pmm" se aplicó a las variables `peso_madre` y `visitas_medicas`, que eran las únicas con valores perdidos. El resto de variables no fueron imputadas, por lo que aparecen con comillas vacías.
+
+Debajo se presenta la matriz de predictores, que indica qué variables fueron utilizadas como base para imputar otras. Esta matriz está compuesta por unos y ceros, donde el número uno significa que esa variable fue usada como predictor, y el cero que no se usó. Por ejemplo, para imputar `peso_madre`, se utilizaron como predictores todas las demás variables excepto `peso_madre` en sí misma, lo cual es correcto. Lo mismo ocurre con la variable `visitas_medicas`, donde se emplearon todas las otras variables para estimar sus valores faltantes.
+
+## 5 Analizando los datos imputados
+
+Antes de realizar análisis adicionales al dataset imputado, es necesario explorar los datos imputados. Idealmente, los valores imputados deben ser plausibles en comparación con los valores observados. Podemos observar esto en un gráfico de cajas y bigotes que muestra la distribución de los datos imputados (20 conjuntos) versus los datos originales sin imputar.
+
+Para la variable `peso_madre`
+
+```{r}
+ggmice(data_imputada, aes(x = .imp, y = peso_madre)) +
+  geom_jitter(height = 0, width = 0.25) +
+  geom_boxplot(width = 0.5, size = 1, alpha = 0.55, outlier.shape = NA) +
+  labs(x = "Número de imputación")
+```
+
+**CONCLUSION:**
+
+El gráfico muestra cómo quedaron los valores imputados de la variable `peso_madre` después de aplicar el método `mice`. La columna que está en el número 0 representa los datos reales, es decir, los que no estaban perdidos. Los puntos azules muestran la distribución original del peso de las madres.
+
+Las columnas del 1 al 20 muestran los resultados de las 20 imputaciones hechas para rellenar los valores que faltaban. Cada boxplot rosado representa una versión distinta de los datos imputados. Lo importante acá es ver que la forma general y el rango de los datos imputados se parecen mucho a los datos originales. Por ejemplo, los promedios, la dispersión y los valores extremos están más o menos dentro del mismo rango.
+
+Esto nos dice que las imputaciones parecen razonables y no generan resultados extraños o fuera de lugar. En resumen, el modelo de imputación hizo un buen trabajo rellenando los datos faltantes de forma coherente con lo que ya teníamos observado.
+
+Para la variable `visitas_medicas`
+
+```{r}
+ggmice(data_imputada, aes(x = .imp, y = visitas_medicas)) +
+  geom_jitter(height = 0, width = 0.25) +
+  geom_boxplot(width = 0.5, size = 1, alpha = 0.55, outlier.shape = NA) +
+  labs(x = "Número de imputación")
+```
+
+**CONCLUSION:**
+
+En este gráfico vemos cómo se comportan los valores imputados de la variable `visitas_medicas`. La primera caja, en el número 0, muestra los datos reales, es decir, las visitas que sí estaban registradas desde el inicio. A partir del número 1 hasta el 20 se ven las 20 versiones diferentes que el modelo generó para rellenar los datos faltantes.
+
+Lo bueno es que las cajas rosadas (los valores imputados) tienen una forma y un rango muy parecidos al de los datos originales. En todos los casos, la mayoría de los valores imputados están entre 0 y 3 visitas, que es lo más común también en los datos reales. Hay algunos puntos fuera de la caja (los puntitos), pero siguen estando dentro de un rango razonable.
+
+Para datos categóricos, podemos crear una tabla de dos entradas que compare la distribución de la variable entre los casos observados y los imputados. Para ello, primero es necesario convertir el objeto imputado a formato “long”.
+
+```{r}
+data_imputada_l <- complete(data_imputada, "long", include = TRUE)
+```
+
+Ahora la tabla.
+
+```{r}
+data_imputada_l <- data_imputada_l %>%
+  mutate(imputed = .imp > 0,
+         imputed = factor(imputed,
+                          levels = c(FALSE, TRUE),
+                          labels = c("Observado", "Imputado")))
+
+prop.table(table(data_imputada_l$bajo_peso, data_imputada_l$imputed), margin = 2)
+```
+
+**CONCLUSION:**
+
+En la tabla que aparece se está comparando la proporción de recién nacidos con bajo peso (`Sí`) y sin bajo peso (`No`) entre los datos originales y los imputados. En los datos observados, el 68.7% no tuvo bajo peso y el 31.3% sí lo tuvo. En los datos imputados, los porcentajes son exactamente los mismos: 68.7% para "No" y 31.3% para "Sí".
+
+Esto es una buena señal. Quiere decir que el proceso de imputación no cambió la distribución original de la variable `bajo_peso`, y que los datos imputados se comportan igual que los reales. Por lo tanto, se puede confiar en que la imputación fue bien hecha para esta variable categórica.
+
+### 5.1 Procedimientos adicionales luego de la imputación
+
+El procedimiento estándar para realizar un análisis de regresión después de la imputación consiste en utilizar la función `with()` para ajustar el modelo de regresión al objeto `mids` (en este caso, `data_imputada`). Luego, se usa la función `pool()` para obtener los resultados combinados, como se reporta normalmente en los análisis finales.
+
+También es posible usar el paquete `gtsummary`, el cual facilita el análisis ya que detecta internamente el uso de imputaciones múltiples, por lo que solo es necesario aplicar `with()`.
+
+```{r}
+tabla_multi <-
+  data_imputada |>
+  with(glm(bajo_peso ~ edad_madre + peso_madre + fuma + visitas_medicas,
+           family = binomial(link = "logit"))) |>
+  tbl_regression(
+    exponentiate = TRUE,
+    label = list(
+      edad_madre = "Edad de la madre",
+      peso_madre = "Peso de la madre",
+      fuma = "Fuma durante el embarazo",
+      visitas_medicas = "Número de visitas prenatales"
+    )
+  ) |>
+  bold_p(t = 0.05) |>
+  modify_header(
+    estimate = "**OR ajustado**", 
+    p.value = "**Valor p**"
+  )
+
+```
+
+```{r}
+tabla_multi
+```
+
+**CONCLUSION:**
+
+Primero, se observa que la edad de la madre no tiene un efecto claro. El valor OR es 0.96, lo que indica una ligera reducción del riesgo con más edad, pero como el intervalo de confianza (de 0.90 a 1.03) incluye el valor 1 y el valor p es 0.3, no es estadísticamente significativo.
+
+En el caso del peso de la madre, el OR es 0.99, con un intervalo que llega justo hasta 1.00 y un valor p cercano a 0.05. Esto sugiere que a mayor peso materno hay una ligera tendencia a tener menos riesgo de bajo peso en el bebé, pero este resultado es borderline, es decir, casi significativo pero no del todo concluyente.
+
+El resultado más importante es el de fumar durante el embarazo. Las madres que fumaron tuvieron casi el doble de riesgo de tener un bebé con bajo peso comparado con las que no fumaron (OR = 1.96). Este efecto sí es estadísticamente significativo, ya que el intervalo de confianza no incluye el 1 y el valor p es 0.041.
+
+Por último, el número de visitas prenatales no parece estar relacionado con el bajo peso, ya que el OR es 0.99 y el valor p es mayor a 0.9, lo cual indica que no hay diferencia entre tener más o menos controles en este caso.
